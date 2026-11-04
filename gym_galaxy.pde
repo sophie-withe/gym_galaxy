@@ -201,7 +201,7 @@ void placePlanets()
 
   for (int i = 0; i < totalWeeks; i++)
   {
-    ringRadii[i] = 90 + i * 65;
+    ringRadii[i] = 65 + i * 40;
   }
 
   // Places planets on their corresponding weekly rings
@@ -239,8 +239,17 @@ void placePlanets()
         planetSize[i] = map(duration, 30, 120, 25, 70);
         planetSize[i] = constrain(planetSize[i], 25, 70);
 
+        // Alternates the starting angle of each weekly orbit
+        float angleOffset = 0;
+
+        // Every other week is rotated to create a checkerboard pattern
+        if (week % 2 == 0)
+        {
+          angleOffset = PI / planetsThisWeek;
+        }
+
         // Spreads planets evenly around their weekly orbit
-        float angle = -HALF_PI + TWO_PI * planetPosition / planetsThisWeek;
+        float angle = -HALF_PI + TWO_PI * planetPosition / planetsThisWeek + angleOffset;
 
         float radius = ringRadii[week - 1];
 
