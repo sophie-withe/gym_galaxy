@@ -6,7 +6,8 @@ float[] planetSize;
 int[] planetColours;
 int[] sessionNumbers;
 
-int[] ringRadii = {90, 170, 250, 330};
+int[] ringRadii;
+int[] weekNumbers;
 
 void setup()
 {
@@ -17,12 +18,12 @@ void setup()
 
   if (gymData == null)
   {
-    println("Error: gym.csv could not be loaded.");
+    println("Error: gym.csv could not be loaded");
     exit();
     return;
   }
 
-  println("Loaded " + gymData.getRowCount() + " gym sessions.");
+  println("Loaded " + gymData.getRowCount() + " gym sessions");
 
   int totalSessions = gymData.getRowCount();
 
@@ -32,6 +33,7 @@ void setup()
   planetSize = new float[totalSessions];
   planetColours = new int[totalSessions];
   sessionNumbers = new int[totalSessions];
+  weekNumbers = new int[totalSessions];
 
   // Calculates positions in date order
   placePlanets();
@@ -81,8 +83,7 @@ void draw()
       continue;
     }
 
-    float distanceFromMouse = dist(mouseX, mouseY, planetX[i], planetY[i]
-    );
+    float distanceFromMouse = dist(mouseX, mouseY, planetX[i], planetY[i]);
 
     if (distanceFromMouse <= planetSize[i] / 2)
     {
@@ -156,77 +157,129 @@ void placePlanets()
     sortedSessions[j + 1] = current;
   }
 
-  int planetIndex = 0;
+  // Finds the first and last dates
+  String firstDate = sortedSessions[0].getString("date");
 
-  // Places planets around each orbital ring
-  for (int ring = 0; ring < ringRadii.length && planetIndex < totalSessions; ring++)
+  // Calculates the week number for every session
+  int[] sessionWeeks = new int[totalSessions];
+
+  int totalWeeks = 1;
+
+  for (int i = 0; i < totalSessions; i++)
   {
-    float radius = ringRadii[ring];
+    String currentDate = sortedSessions[i].getString("date");
 
-    // Find how many planets can fit on this ring
-    int capacity = ringCapacity(radius);
+    // Extracts the date into year, month and day
+    String[] firstParts = split(firstDate, '-');
+    String[] currentParts = split(currentDate, '-');
 
-    // Limits the number of planets to the available space
-    int planetsOnRing = min(capacity, totalSessions - planetIndex);
+    int firstDay = dayOfYear(int(firstParts[0]), int(firstParts[1]), int(firstParts[2]));
 
-    for (int p = 0; p < planetsOnRing; p++)
+    int currentDay = dayOfYear(int(currentParts[0]), int(currentParts[1]), int(currentParts[2]));
+
+    int firstYear = int(firstParts[0]);
+    int currentYear = int(currentParts[0]);
+
+    int daysDifference = 0;
+
+    // Calculates days between dates, including year changes
+    for (int year = firstYear; year < currentYear; year++)
     {
-      TableRow session = sortedSessions[planetIndex];
-
-      int sessionNumber = session.getInt("session");
-      String day = session.getString("day");
-      int duration = session.getInt("duration");
-
-      sessionNumbers[planetIndex] = sessionNumber;
-      planetColours[planetIndex] = dayColour(day);
-
-      // Longer workouts produce larger planets
-      planetSize[planetIndex] = map(duration, 30, 120, 25, 70);
-      planetSize[planetIndex] = constrain(planetSize[planetIndex], 25, 70);
-
-      // Spreads planets evenly around ring
-      float angle = -HALF_PI + TWO_PI * p / planetsOnRing;
-
-      // Calculates position relative to the central sun
-      planetX[planetIndex] = width / 2 + cos(angle) * radius;
-
-      planetY[planetIndex] = height / 2 + sin(angle) * radius;
-
-      planetIndex++;
+      daysDifference += isLeapYear(year) ? 366 : 365;
     }
+
+    daysDifference += currentDay - firstDay;
+
+    // Groups sessions into 7-day weeks
+    sessionWeeks[i] = daysDifference / 7 + 1;
+
+    totalWeeks = max(totalWeeks, sessionWeeks[i]);
   }
 
-  // Warns if there are more sessions than available spaces
-  if (planetIndex < totalSessions)
+  // Creates one orbital ring for every week
+  ringRadii = new int[totalWeeks];
+
+  for (int i = 0; i < totalWeeks; i++)
   {
-    println("Warning: " + (totalSessions - planetIndex) + " sessions could not fit in the galaxy.");
+    ringRadii[i] = 90 + i * 65;
+  }
+
+  // Places planets on their corresponding weekly rings
+  for (int week = 1; week <= totalWeeks; week++)
+  {
+    int planetsThisWeek = 0;
+
+    // Counts sessions in this week
+    for (int i = 0; i < totalSessions; i++)
+    {
+      if (sessionWeeks[i] == week)
+      {
+        planetsThisWeek++;
+      }
+    }
+
+    int planetPosition = 0;
+
+    // Places each session around its weekly ring
+    for (int i = 0; i < totalSessions; i++)
+    {
+      if (sessionWeeks[i] == week)
+      {
+        TableRow session = sortedSessions[i];
+
+        int sessionNumber = session.getInt("session");
+        String day = session.getString("day");
+        int duration = session.getInt("duration");
+
+        sessionNumbers[i] = sessionNumber;
+        planetColours[i] = dayColour(day);
+        weekNumbers[i] = week;
+
+        // Longer workouts produce larger planets
+        planetSize[i] = map(duration, 30, 120, 25, 70);
+        planetSize[i] = constrain(planetSize[i], 25, 70);
+
+        // Spreads planets evenly around their weekly orbit
+        float angle = -HALF_PI + TWO_PI * planetPosition / planetsThisWeek;
+
+        float radius = ringRadii[week - 1];
+
+        // Calculates position relative to the sun
+        planetX[i] = width / 2 + cos(angle) * radius;
+        planetY[i] = height / 2 + sin(angle) * radius;
+
+        planetPosition++;
+      }
+    }
   }
 }
 
-// Calculates ring capacity while leaving room between planets
-int ringCapacity(float radius)
+
+// Calculates day number within a year
+int dayOfYear(int year, int month, int day)
 {
-  int capacity = 1;
+  int[] daysInMonth = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
-  // Adds 8 pixels of space between neighbouring planets
-  float minimumSeparation = 78;
-
-  for (int n = 2; n <= 100; n++)
+  if (isLeapYear(year))
   {
-    // Distance between neighbours on a circular ring
-    float separation = 2 * radius * sin(PI / n);
-
-    if (separation >= minimumSeparation)
-    {
-      capacity = n;
-    }
-    else
-    {
-      break;
-    }
+    daysInMonth[1] = 29;
   }
 
-  return capacity;
+  int totalDays = day;
+
+  for (int i = 0; i < month - 1; i++)
+  {
+    totalDays += daysInMonth[i];
+  }
+
+  return totalDays;
+}
+
+
+// Checks whether a year is a leap year
+boolean isLeapYear(int year)
+{
+  return year % 400 == 0 || (year % 4 == 0 && year % 100 != 0);
 }
 
 // Gives each day its own colour
